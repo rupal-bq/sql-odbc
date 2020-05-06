@@ -42,7 +42,8 @@ jobs:
     - name: build-installer
       if: success()
       run: |
-        cd cmake-build
+        mkdir installer-build
+        cd installer-build
         cmake ../src -D CMAKE_INSTALL_PREFIX=$prefix_path/AWSSDK/ -D BUILD_WITH_TESTS=OFF
         make
         cpack .
@@ -56,7 +57,7 @@ jobs:
         cp ./lib64/*.dylib build
         cp ./lib64/*.a build
         cp $(ls -d bin64/* | grep -v "\.") build
-        cp ./cmake-build/*.pkg installer
+        cp ./installer-build/*.pkg installer
     #    cp ./bin64/*.html test-output
     #    cp ./bin64/*.log test-output
     - name: upload-build

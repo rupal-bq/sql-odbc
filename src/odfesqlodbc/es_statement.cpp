@@ -238,6 +238,20 @@ QResultClass *SendQueryGetResult(StatementClass *stmt, BOOL commit) {
     return res;
 }
 
+RETCODE GetMoreResult(StatementClass *stmt) {
+    ConnectionClass *conn = SC_get_conn(stmt);
+    QResultClass *res = SC_get_Result(stmt);
+
+    // Get ESResult
+    ESResult *es_res = ESGetResult(conn->esconn);
+    if (es_res == NULL) {
+        QR_Destructor(res);
+        return NULL;
+    }
+
+
+}
+
 RETCODE AssignResult(StatementClass *stmt) {
     if (stmt == NULL)
         return SQL_ERROR;

@@ -56,6 +56,7 @@ class ESCommunication {
     void DropDBConnection();
     void LogMsg(ESLogLevel level, const char* msg);
     int ExecDirect(const char* query, const char* fetch_size_);
+    void GetResultWithCursor(std::string cursor);
     ESResult* PopResult();
     std::string GetClientEncoding();
     bool SetClientEncoding(std::string& encoding);
@@ -65,7 +66,7 @@ class ESCommunication {
                       const Aws::Http::HttpMethod request_type,
                       const std::string& content_type, const std::string& query,
                       std::shared_ptr< Aws::Http::HttpResponse >& response,
-                      const std::string& fetch_size);
+                      const std::string& fetch_size, const std::string& cursor);
     void AwsHttpResponseToString(
         std::shared_ptr< Aws::Http::HttpResponse > response,
         std::string& output);

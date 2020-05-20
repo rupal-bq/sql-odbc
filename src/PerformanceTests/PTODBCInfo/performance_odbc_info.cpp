@@ -86,7 +86,7 @@ void GetVersionInfoString(std::string& version_info) {
     std::string endpoint, content_type, query, fetch_size;
     std::shared_ptr< Aws::Http::HttpResponse > response = nullptr;
     es_comm.IssueRequest(endpoint, Aws::Http::HttpMethod::HTTP_GET,
-                         content_type, query, response, fetch_size);
+                         content_type, query, response, fetch_size, "");
 
     // Convert response to string
     ASSERT_TRUE(response != nullptr);

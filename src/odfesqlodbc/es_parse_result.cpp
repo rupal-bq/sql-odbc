@@ -132,6 +132,12 @@ BOOL CC_No_Metadata_from_ESResult(QResultClass *q_res, ConnectionClass *conn,
                : FALSE;
 }
 
+BOOL CC_Assign_Table_Data(json_doc &es_result_doc, QResultClass *q_res,
+                          const schema_type &doc_schema,
+                          ColumnInfoClass &fields) {
+    return 0;
+}
+
 bool _CC_No_Metadata_from_ESResult(QResultClass *q_res, ConnectionClass *conn,
                                    const char *cursor, ESResult &es_result) {
     // Note - NULL conn and/or cursor is valid

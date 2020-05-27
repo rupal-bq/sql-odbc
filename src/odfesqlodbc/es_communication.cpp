@@ -64,7 +64,19 @@ static const std::string JSON_SCHEMA =
     "\"size\": { \"type\": \"integer\" },"
     "\"status\": { \"type\": \"integer\" }"
     "},"
-    "\"required\": [\"datarows\"]"
+    "\"required\":  [\"schema\", \"total\", \"datarows\", \"size\", \"status\"]"
+    "}";
+static const std::string CURSOR_JSON_SCHEMA =
+    "{"  // This was generated from the example elasticsearch data
+    "\"type\": \"object\","
+    "\"properties\": {"
+    "\"cursor\": { \"type\": \"string\" },"
+    "\"datarows\": {"
+    "\"type\": \"array\","
+    "\"items\": {}"
+    "},"
+    "},"
+    "\"required\":  [\"datarows\"]"
     "}";
 
 void ESCommunication::AwsHttpResponseToString(
@@ -94,6 +106,22 @@ void ESCommunication::GetJsonSchema(ESResult& es_result) {
     try {
         LogMsg(ES_DEBUG, "Parsing result JSON with schema.");
         es_result.es_result_doc.parse(es_result.result_json, JSON_SCHEMA);
+    } catch (const rabbit::parse_error& e) {
+        // The exception rabbit gives is quite useless - providing the json
+        // will aid debugging for users
+        std::string str = "Exception obtained '" + std::string(e.what())
+                          + "' when parsing json string '"
+                          + es_result.result_json + "'.";
+        throw std::runtime_error(str.c_str());
+    }
+}
+
+void ESCommunication::GetCursorSchema(ESResult& es_result) {
+    // Prepare document and validate schema
+    try {
+        LogMsg(ES_DEBUG, "Parsing result JSON with cursor.");
+        es_result.es_result_doc.parse(es_result.result_json,
+                                      CURSOR_JSON_SCHEMA);
     } catch (const rabbit::parse_error& e) {
         // The exception rabbit gives is quite useless - providing the json
         // will aid debugging for users
@@ -448,52 +476,94 @@ int ESCommunication::ExecDirect(const char* query, const char* fetch_size_) {
     }
     m_result_queue.push(std::unique_ptr< ESResult >(result));
     if (result->cursor.size() > 0) {
-        GetResultWithCursor(result->cursor);
+        auto send_cursor_queries = std::async(
+            std::launch::async, [&]() { SendCursorQueries(result->cursor); });
     }
     return 0;
 }
 
-void ESCommunication::GetResultWithCursor(std::string cursor) {
-    int send_request = SQL_ERROR;
-    do {
-        std::shared_ptr< Aws::Http::HttpResponse > response = nullptr;
-        IssueRequest(SQL_ENDPOINT_FORMAT_JDBC, Aws::Http::HttpMethod::HTTP_POST,
-                     ctype, "", response, "", cursor);
-        if (response == nullptr) {
-            m_error_message =
-                "Failed to receive response from query. "
-                "Received NULL response.";
-            LogMsg(ES_ERROR, m_error_message.c_str());
-            return;
-        }
-        try {
-            ESResult* result = new ESResult;
-            AwsHttpResponseToString(response, result->result_json);
-            GetJsonSchema(*result);
-            if (!m_result_queue.empty()) {
-                result->column_info = m_result_queue.front()->column_info;
-                result->command_type = m_result_queue.front()->command_type;
-                result->num_fields = m_result_queue.front()->num_fields;
-            }
-            if (result->es_result_doc.has("cursor")) {
-                result->cursor = result->es_result_doc["cursor"].as_string();
-            }
-            m_result_queue.push(std::unique_ptr< ESResult >(result));
+void ESCommunication::SendCursorQueries(std::string cursor) {
+    try {
+        BlockingQueue< ESResult* > queue;
+        auto future_thread =
+            std::async(std::launch::async, [&]() { DataProcessing(&queue); });
 
-            if (result->es_result_doc.has("datarows")) {
-                if (result->es_result_doc["datarows"].size() < 1)
-                    send_request = SQL_ERROR;
-                else
-                    send_request = SQL_SUCCESS;
+        while (cursor.size() > 0) {
+            std::shared_ptr< Aws::Http::HttpResponse > response = nullptr;
+            IssueRequest(SQL_ENDPOINT_FORMAT_JDBC,
+                         Aws::Http::HttpMethod::HTTP_POST, ctype, "", response,
+                         "", cursor);
+            if (response == nullptr) {
+                m_error_message =
+                    "Failed to receive response from cursor. "
+                    "Received NULL response.";
+                LogMsg(ES_ERROR, m_error_message.c_str());
+                return;
+            }
+            ESResult* es_result = new ESResult;
+            AwsHttpResponseToString(response, es_result->result_json);
+            GetCursorSchema(*es_result);
+            queue.push(es_result);
+            if (es_result->es_result_doc.has("cursor")) {
+                cursor = es_result->es_result_doc["cursor"].as_string();
+            } else {
+                SendCloseCursorRequest(cursor);
+                cursor = "";
+                queue.push(NULL);
+            }
+        }
+    } catch (std::runtime_error& e) {
+        m_error_message =
+            "Received runtime exception: " + std::string(e.what());
+        LogMsg(ES_ERROR, m_error_message.c_str());
+    }
+    return;
+}
+
+void ESCommunication::DataProcessing(BlockingQueue< ESResult* >* queue) {
+    bool loop = TRUE;
+    while (loop) {
+        try {
+            ESResult* es_result = queue->pop();
+            if (es_result != NULL) {
+                if (!m_result_queue.empty()) {
+                    es_result->column_info =
+                        m_result_queue.front()->column_info;
+                    es_result->command_type =
+                        m_result_queue.front()->command_type;
+                    es_result->num_fields = m_result_queue.front()->num_fields;
+                }
+                if (es_result->es_result_doc.has("cursor")) {
+                    es_result->cursor =
+                        es_result->es_result_doc["cursor"].as_string();
+                } else {
+                    loop = FALSE;
+                }
+                m_result_queue.push(std::unique_ptr< ESResult >(es_result));
+            } else {
+                loop = FALSE;
             }
         } catch (std::runtime_error& e) {
-            m_error_message =
-                "Received runtime exception: " + std::string(e.what());
+            m_error_message = "Failed to get result. " + std::string(e.what());
             LogMsg(ES_ERROR, m_error_message.c_str());
             return;
         }
-    } while (send_request == SQL_SUCCESS);
+    }
 }
+
+void ESCommunication::SendCloseCursorRequest(std::string cursor) {
+    std::shared_ptr< Aws::Http::HttpResponse > response = nullptr;
+    IssueRequest(SQL_ENDPOINT_CLOSE_CURSOR, Aws::Http::HttpMethod::HTTP_POST,
+                 ctype, "", response, "", cursor);
+    if (response == nullptr) {
+        m_error_message =
+            "Failed to receive response from cursor. "
+            "Received NULL response.";
+        LogMsg(ES_ERROR, m_error_message.c_str());
+        return;
+    }
+}
+
 
 void ESCommunication::ConstructESResult(ESResult& result) {
     GetJsonSchema(result);
@@ -541,6 +611,16 @@ ESResult* ESCommunication::PopResult() {
     ESResult* result = m_result_queue.front().release();
     m_result_queue.pop();
     return result;
+}
+
+schema_type* ESCommunication::GetDocSchema() {
+    return &m_doc_schema;
+}
+
+bool ESCommunication::SetDocSchema(schema_type* doc_schema) {
+    for (int i = 0; i < doc_schema->size(); i++)
+        m_doc_schema.push_back(doc_schema->at(i));
+    return true;
 }
 
 // TODO #36 - Send query to database to get encoding

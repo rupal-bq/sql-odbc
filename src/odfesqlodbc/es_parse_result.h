@@ -28,6 +28,7 @@ extern "C" {
 
 #ifdef __cplusplus
 #include "es_helper.h"
+typedef rabbit::document json_doc;
 // const char* is used instead of string for the cursor, because a NULL cursor
 // is sometimes used Cannot pass q_res as reference because it breaks qresult.h
 // macros that expect to use -> operator

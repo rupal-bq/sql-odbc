@@ -30,8 +30,6 @@
 #endif  // __APPLE__
 #include "statement.h"
 
-typedef std::vector< std::pair< std::string, OID > > schema_type;
-typedef rabbit::document json_doc;
 typedef rabbit::array json_arr;
 typedef json_arr::iterator::result_type json_arr_it;
 
@@ -135,7 +133,9 @@ BOOL CC_No_Metadata_from_ESResult(QResultClass *q_res, ConnectionClass *conn,
 BOOL CC_Assign_Table_Data(json_doc &es_result_doc, QResultClass *q_res,
                           const schema_type &doc_schema,
                           ColumnInfoClass &fields) {
-    return 0;
+    ClearError();
+    return AssignTableData(es_result_doc, q_res, doc_schema, fields) ? TRUE
+                                                                     : FALSE;
 }
 
 bool _CC_No_Metadata_from_ESResult(QResultClass *q_res, ConnectionClass *conn,
@@ -147,6 +147,7 @@ bool _CC_No_Metadata_from_ESResult(QResultClass *q_res, ConnectionClass *conn,
     try {
         schema_type doc_schema;
         GetSchemaInfo(doc_schema, es_result.es_result_doc);
+        ESSetDocSchema(conn, &doc_schema);
 
         SQLULEN starting_cached_rows = q_res->num_cached_rows;
 
@@ -185,6 +186,7 @@ bool _CC_Metadata_from_ESResult(QResultClass *q_res, ConnectionClass *conn,
     try {
         schema_type doc_schema;
         GetSchemaInfo(doc_schema, es_result.es_result_doc);
+        ESSetDocSchema(conn, &doc_schema);
 
         // Assign table data and column headers
         if (!AssignColumnHeaders(doc_schema, q_res, es_result))
@@ -222,6 +224,7 @@ bool _CC_from_ESResult(QResultClass *q_res, ConnectionClass *conn,
     try {
         schema_type doc_schema;
         GetSchemaInfo(doc_schema, es_result.es_result_doc);
+        ESSetDocSchema(conn, &doc_schema);
         SQLULEN starting_cached_rows = q_res->num_cached_rows;
 
         // Assign table data and column headers

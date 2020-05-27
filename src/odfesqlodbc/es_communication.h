@@ -20,6 +20,7 @@
 // clang-format off
 #include <memory>
 #include <queue>
+#include <future>
 #include "es_types.h"
 
 //Keep rabbit at top otherwise it gives build error because of some variable names like max, min
@@ -39,7 +40,33 @@
 #include <aws/core/http/HttpClientFactory.h>
 #include <aws/core/http/HttpClient.h>
 #include <aws/core/client/ClientConfiguration.h>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
 // clang-format on
+template < typename T >
+class BlockingQueue {
+   private:
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::deque< T > queue;
+
+   public:
+    void push(T const& value) {
+        {
+            std::unique_lock< std::mutex > lock(this->mutex);
+            queue.push_front(value);
+        }
+        this->condition.notify_one();
+    }
+    T pop() {
+        std::unique_lock< std::mutex > lock(this->mutex);
+        this->condition.wait(lock, [=] { return !this->queue.empty(); });
+        T rc(std::move(this->queue.back()));
+        this->queue.pop_back();
+        return rc;
+    }
+};
 
 class ESCommunication {
    public:
@@ -56,8 +83,11 @@ class ESCommunication {
     void DropDBConnection();
     void LogMsg(ESLogLevel level, const char* msg);
     int ExecDirect(const char* query, const char* fetch_size_);
-    void GetResultWithCursor(std::string cursor);
+    void SendCursorQueries(std::string cursor);
+    void DataProcessing(BlockingQueue< ESResult* >* queue);
     ESResult* PopResult();
+    schema_type* GetDocSchema();
+    bool SetDocSchema(schema_type* doc_schema);
     std::string GetClientEncoding();
     bool SetClientEncoding(std::string& encoding);
     bool IsSQLPluginInstalled(const std::string& plugin_response);
@@ -70,6 +100,7 @@ class ESCommunication {
     void AwsHttpResponseToString(
         std::shared_ptr< Aws::Http::HttpResponse > response,
         std::string& output);
+    void SendCloseCursorRequest(std::string cursor);
 
    private:
     void InitializeConnection();
@@ -77,6 +108,7 @@ class ESCommunication {
     bool EstablishConnection();
     void ConstructESResult(ESResult& result);
     void GetJsonSchema(ESResult& es_result);
+    void GetCursorSchema(ESResult& es_result);
 
     // TODO #35 - Go through and add error messages on exit conditions
     std::string m_error_message;  
@@ -85,6 +117,7 @@ class ESCommunication {
     ConnStatusType m_status;
     bool m_valid_connection_options;
     std::queue< std::unique_ptr< ESResult > > m_result_queue;
+    schema_type m_doc_schema;
     runtime_options m_rt_opts;
     std::string m_client_encoding;
     Aws::SDKOptions m_options;

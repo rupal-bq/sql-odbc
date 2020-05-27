@@ -141,11 +141,39 @@ RETCODE ExecuteStatement(StatementClass *stmt, BOOL commit) {
         SC_set_Result(stmt, res);
     }
 
+    if (commit) {
+        GetMoreResults(stmt);
+    }
+
     if (!SC_get_Curres(stmt))
         SC_set_Curres(stmt, SC_get_Result(stmt));
     stmt->diag_row_count = res->recent_processed_row_count;
 
     return CleanUp();
+}
+
+SQLRETURN GetMoreResults(StatementClass *stmt) {
+    if (stmt == NULL)
+        return SQL_ERROR;
+    ConnectionClass *conn = SC_get_conn(stmt);
+    QResultClass *q_res = SC_get_Result(stmt);
+    schema_type *doc_schema = ESGetDocSchema(conn);
+    if ((q_res == NULL) && (conn == NULL) && (doc_schema == NULL)) {
+        return SQL_ERROR;
+    }
+    int get_more_result = SQL_ERROR;
+    do {
+        ESResult *es_res = ESGetResult(conn->esconn);
+        if (es_res != NULL) {
+            get_more_result = SQL_SUCCESS;
+            CC_Assign_Table_Data(es_res->es_result_doc, q_res, *doc_schema,
+                                 *(q_res->fields));
+        } else {
+            get_more_result = SQL_ERROR;
+        }
+    } while (get_more_result == SQL_SUCCESS);
+    ESClearSchema(doc_schema);
+    return SQL_SUCCESS;
 }
 
 RETCODE RePrepareStatement(StatementClass *stmt) {
@@ -238,20 +266,6 @@ QResultClass *SendQueryGetResult(StatementClass *stmt, BOOL commit) {
     return res;
 }
 
-RETCODE GetMoreResult(StatementClass *stmt) {
-    ConnectionClass *conn = SC_get_conn(stmt);
-    QResultClass *res = SC_get_Result(stmt);
-
-    // Get ESResult
-    ESResult *es_res = ESGetResult(conn->esconn);
-    if (es_res == NULL) {
-        QR_Destructor(res);
-        return NULL;
-    }
-
-
-}
-
 RETCODE AssignResult(StatementClass *stmt) {
     if (stmt == NULL)
         return SQL_ERROR;
@@ -268,7 +282,7 @@ RETCODE AssignResult(StatementClass *stmt) {
         QR_Destructor(res);
         return SQL_ERROR;
     }
-
+    GetMoreResults(stmt);
     // Deallocate and return result
     ESClearResult(es_res);
     res->es_result = NULL;

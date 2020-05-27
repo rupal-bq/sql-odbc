@@ -284,9 +284,7 @@ void ESCommunication::IssueRequest(
         rabbit::object body;
         body["query"] = query;
         if (!query.empty()) {
-            if (!fetch_size.empty())
                 body["query"] = query;
-            body["fetch_size"] = fetch_size;
             if (!fetch_size.empty() && fetch_size != "-1")
                 body["fetch_size"] = fetch_size;
         } else if (!cursor.empty()) {

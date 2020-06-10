@@ -37,10 +37,10 @@ class TestPagination : public testing::Test {
     }
 
     void TearDown() {
-        if (SQL_NULL_HDBC != m_conn) {
-            SQLFreeHandle(SQL_HANDLE_DBC, m_conn);
-            SQLFreeHandle(SQL_HANDLE_ENV, m_env);
-        }
+        ASSERT_NO_THROW(CloseCursor(&m_hstmt, true, true));
+        SQLFreeHandle(SQL_HANDLE_STMT, m_hstmt);
+        SQLDisconnect(m_conn);
+        SQLFreeHandle(SQL_HANDLE_ENV, m_env);
     }
 
     int GetTotalRowsAfterQueryExecution() {

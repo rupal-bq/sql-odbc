@@ -308,9 +308,9 @@ std::shared_ptr< Aws::Http::HttpResponse > ESCommunication::IssueRequest(
         request->SetAuthorization("Basic " + hashed_userpw);
     } else if (m_rt_opts.auth.auth_type == AUTHTYPE_IAM) {
         std::shared_ptr< Aws::Auth::ProfileConfigFileAWSCredentialsProvider >
-            credential_provider =
-                Aws::MakeShared< Aws::Auth::ProfileConfigFileAWSCredentialsProvider >(
-                    ALLOCATION_TAG.c_str(), ESODBC_PROFILE_NAME.c_str());
+            credential_provider = Aws::MakeShared<
+                Aws::Auth::ProfileConfigFileAWSCredentialsProvider >(
+                ALLOCATION_TAG.c_str(), ESODBC_PROFILE_NAME.c_str());
         Aws::Client::AWSAuthV4Signer signer(credential_provider,
                                             SERVICE_NAME.c_str(),
                                             m_rt_opts.auth.region.c_str());
@@ -471,12 +471,21 @@ int ESCommunication::ExecDirect(const char* query, const char* fetch_size_) {
         delete result;
         return -1;
     }
+
+    std::unique_lock< std::mutex > lock_queue(mutex);
+    auto now = std::chrono::system_clock::now();
+    condition_variable.wait_until(
+        lock_queue, now + std::chrono::milliseconds(1000),
+        [&]() { return m_result_queue.size() < m_result_queue_capacity; });
+
     m_result_queue.push(std::unique_ptr< ESResult >(result));
+
+    lock_queue.unlock();
+    condition_variable.notify_one();
+
     if (!result->cursor.empty()) {
-        // If response has cursor, this thread will retrives more results pages asynchronously.
-        auto send_cursor_queries = std::async(std::launch::async, [&]() {
-            SendCursorQueries(result->cursor.c_str());
-        });
+        m_thread = std::thread(&ESCommunication::SendCursorQueries, this, result->cursor.c_str());
+        m_thread.detach();
     }
     return 0;
 }
@@ -487,7 +496,14 @@ void ESCommunication::SendCursorQueries(const char* _cursor) {
     }
     try {
         std::string cursor(_cursor);
-        while (!cursor.empty() && (m_result_queue.size() < m_result_queue_capacity)) {
+        while (!cursor.empty()) {
+            std::unique_lock< std::mutex > lock_queue(mutex);
+            auto now = std::chrono::system_clock::now();
+             condition_variable.wait_until(
+                 lock_queue, now + std::chrono::milliseconds(1000), [&]() {
+                return m_result_queue.size() < m_result_queue_capacity;
+            });
+
             std::shared_ptr< Aws::Http::HttpResponse > response = IssueRequest(
                 SQL_ENDPOINT_FORMAT_JDBC, Aws::Http::HttpMethod::HTTP_POST,
                 ctype, "", "", cursor);
@@ -510,6 +526,9 @@ void ESCommunication::SendCursorQueries(const char* _cursor) {
                 cursor.clear();
             }
             m_result_queue.push(std::move(es_result));
+
+            lock_queue.unlock();
+            condition_variable.notify_one();
         }
     } catch (std::runtime_error& e) {
         m_error_message =
@@ -532,7 +551,7 @@ void ESCommunication::SendCloseCursorRequest(const std::string& cursor) {
 
 void ESCommunication::ClearQueue() {
     while (!m_result_queue.empty()) {
-        m_result_queue.pop();
+        PopResult();
     }
 }
 
@@ -575,12 +594,20 @@ inline void ESCommunication::LogMsg(ESLogLevel level, const char* msg) {
 }
 
 ESResult* ESCommunication::PopResult() {
+    std::unique_lock< std::mutex > lock_queue(mutex);
+    condition_variable.wait(lock_queue,
+                            [&]() { return !m_result_queue.empty(); });
+
     if (m_result_queue.empty()) {
         LogMsg(ES_WARNING, "Result queue is empty; returning null result.");
         return NULL;
     }
     ESResult* result = m_result_queue.front().release();
     m_result_queue.pop();
+
+    lock_queue.unlock();
+    condition_variable.notify_one();
+
     return result;
 }
 

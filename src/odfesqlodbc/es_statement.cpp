@@ -141,10 +141,12 @@ RETCODE ExecuteStatement(StatementClass *stmt, BOOL commit) {
         SC_set_Result(stmt, res);
     }
 
+    // If fetch size is O then pagination is disabled
+    // When pagination is disabled, there won't be more results to commit
+    std::string fetch_size(conn->connInfo.fetch_size);
+
     // This will commit results for SQLExecDirect and will not commit
     // results for SQLPrepare since only metadata is required for SQLPrepare
-
-    std::string fetch_size(conn->connInfo.fetch_size);
     if (commit && fetch_size.compare("0")) {
         GetNextResultSet(stmt);
     }

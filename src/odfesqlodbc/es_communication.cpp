@@ -310,9 +310,9 @@ std::shared_ptr< Aws::Http::HttpResponse > ESCommunication::IssueRequest(
         request->SetAuthorization("Basic " + hashed_userpw);
     } else if (m_rt_opts.auth.auth_type == AUTHTYPE_IAM) {
         std::shared_ptr< Aws::Auth::ProfileConfigFileAWSCredentialsProvider >
-            credential_provider = Aws::MakeShared<
-                Aws::Auth::ProfileConfigFileAWSCredentialsProvider >(
-                ALLOCATION_TAG.c_str(), ESODBC_PROFILE_NAME.c_str());
+            credential_provider = 
+                Aws::MakeShared< Aws::Auth::ProfileConfigFileAWSCredentialsProvider >(
+                    ALLOCATION_TAG.c_str(), ESODBC_PROFILE_NAME.c_str());
         Aws::Client::AWSAuthV4Signer signer(credential_provider,
                                             SERVICE_NAME.c_str(),
                                             m_rt_opts.auth.region.c_str());
@@ -473,12 +473,11 @@ int ESCommunication::ExecDirect(const char* query, const char* fetch_size_) {
         delete result;
         return -1;
     }
-
     m_result_queue.push(std::reference_wrapper< ESResult >(*result));
-
     if (!result->cursor.empty()) {
-        m_thread = std::thread(&ESCommunication::SendCursorQueries, this, result->cursor.c_str());
-        m_thread.detach();
+        // If response has cursor, this thread will retrives more results pages
+        m_result_thread = std::thread(&ESCommunication::SendCursorQueries, this, result->cursor.c_str());
+        m_result_thread.detach();
     }
     return 0;
 }
@@ -490,9 +489,11 @@ void ESCommunication::SendCursorQueries(const char* _cursor) {
     try {
         std::string cursor(_cursor);
         while (!cursor.empty()) {
-            std::unique_lock< std::mutex > lock_queue(mutex);
+            // Lock result queue
+            std::unique_lock< std::mutex > lock_queue(m_mutex);
             auto now = std::chrono::system_clock::now();
-            condition_variable.wait_until(
+            // Timeout is 1000ms since SQLFetch might take more time for retriving data
+            m_condition_variable.wait_until(
                 lock_queue, now + std::chrono::milliseconds(1000),
                 [&]() { return !m_result_queue.IsFull(); });
 
@@ -519,8 +520,9 @@ void ESCommunication::SendCursorQueries(const char* _cursor) {
             }
             m_result_queue.push(std::reference_wrapper< ESResult >(*es_result));
 
+            // Unlock result queue
             lock_queue.unlock();
-            condition_variable.notify_one();
+            m_condition_variable.notify_one();
         }
     } catch (std::runtime_error& e) {
         m_error_message =
@@ -542,8 +544,8 @@ void ESCommunication::SendCloseCursorRequest(const std::string& cursor) {
 }
 
 void ESCommunication::ClearQueue() {
-    while (!m_result_queue.empty()) {
-        PopResult();
+    if (!m_result_queue.empty()) {
+        m_result_queue.clear();
     }
 }
 
@@ -586,9 +588,11 @@ inline void ESCommunication::LogMsg(ESLogLevel level, const char* msg) {
 }
 
 ESResult* ESCommunication::PopResult() {
-    std::unique_lock< std::mutex > lock_queue(mutex);
+    // Lock result queue
+    std::unique_lock< std::mutex > lock_queue(m_mutex);
     auto now = std::chrono::system_clock::now();
-    condition_variable.wait_until(lock_queue,
+    // Timeout is 100ms since result should be ready at this point
+    m_condition_variable.wait_until(lock_queue,
                                   now + std::chrono::milliseconds(100),
                                   [&]() { return m_result_queue.IsFull(); });
 
@@ -598,8 +602,9 @@ ESResult* ESCommunication::PopResult() {
     }
     ESResult& result = m_result_queue.pop_front().get();
 
+    // Unlock result queue
     lock_queue.unlock();
-    condition_variable.notify_one();
+    m_condition_variable.notify_one();
 
     return &result;
 }

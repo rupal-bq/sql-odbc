@@ -89,9 +89,9 @@ class ESCommunication {
     ConnStatusType m_status;
     bool m_valid_connection_options;
     ESResultQueue m_result_queue;
-    std::mutex mutex;
-    std::condition_variable condition_variable;
-    std::thread m_thread;
+    std::mutex m_mutex;
+    std::condition_variable m_condition_variable;
+    std::thread m_result_thread;
 
     runtime_options m_rt_opts;
     std::string m_client_encoding;

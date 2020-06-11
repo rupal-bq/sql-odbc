@@ -29,6 +29,7 @@ class ESResultQueue {
     SQLRETURN push(std::reference_wrapper< ESResult > es_result);
     bool empty();
     bool IsFull();
+    void clear();
 
    private:
     size_t m_queue_capacity;

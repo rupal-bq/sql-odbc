@@ -48,3 +48,9 @@ bool ESResultQueue::empty() {
 bool ESResultQueue::IsFull() {
     return (m_queue.size() >= m_queue_capacity) ? true : false;
 }
+
+void ESResultQueue::clear() {
+    while (!m_queue.empty()) {
+        m_queue.pop();
+    }
+}

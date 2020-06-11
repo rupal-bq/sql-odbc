@@ -14,6 +14,7 @@
  *
  */
 
+#define QUEUE_CAPACITY 2
 #include "es_communication.h"
 
 // odfesqlodbc needs to be included before mylog, otherwise mylog will generate
@@ -141,7 +142,8 @@ ESCommunication::ESCommunication()
     : m_status(ConnStatusType::CONNECTION_BAD),
       m_valid_connection_options(false),
       m_error_message(""),
-      m_client_encoding(m_supported_client_encodings[0])
+      m_client_encoding(m_supported_client_encodings[0]),
+      m_result_queue(QUEUE_CAPACITY)
 #ifdef __APPLE__
 #pragma clang diagnostic pop
 #endif  // __APPLE__
@@ -209,7 +211,7 @@ void ESCommunication::DropDBConnection() {
     }
     m_status = ConnStatusType::CONNECTION_BAD;
     if (!m_result_queue.empty()) {
-        m_result_queue = std::queue< std::unique_ptr< ESResult > >();
+        m_result_queue.clear();
     }
 }
 
@@ -472,16 +474,7 @@ int ESCommunication::ExecDirect(const char* query, const char* fetch_size_) {
         return -1;
     }
 
-    std::unique_lock< std::mutex > lock_queue(mutex);
-    auto now = std::chrono::system_clock::now();
-    condition_variable.wait_until(
-        lock_queue, now + std::chrono::milliseconds(1000),
-        [&]() { return m_result_queue.size() < m_result_queue_capacity; });
-
-    m_result_queue.push(std::unique_ptr< ESResult >(result));
-
-    lock_queue.unlock();
-    condition_variable.notify_one();
+    m_result_queue.push(std::reference_wrapper< ESResult >(*result));
 
     if (!result->cursor.empty()) {
         m_thread = std::thread(&ESCommunication::SendCursorQueries, this, result->cursor.c_str());
@@ -499,10 +492,9 @@ void ESCommunication::SendCursorQueries(const char* _cursor) {
         while (!cursor.empty()) {
             std::unique_lock< std::mutex > lock_queue(mutex);
             auto now = std::chrono::system_clock::now();
-             condition_variable.wait_until(
-                 lock_queue, now + std::chrono::milliseconds(1000), [&]() {
-                return m_result_queue.size() < m_result_queue_capacity;
-            });
+            condition_variable.wait_until(
+                lock_queue, now + std::chrono::milliseconds(1000),
+                [&]() { return !m_result_queue.IsFull(); });
 
             std::shared_ptr< Aws::Http::HttpResponse > response = IssueRequest(
                 SQL_ENDPOINT_FORMAT_JDBC, Aws::Http::HttpMethod::HTTP_POST,
@@ -514,7 +506,7 @@ void ESCommunication::SendCursorQueries(const char* _cursor) {
                 LogMsg(ES_ERROR, m_error_message.c_str());
                 return;
             }
-            std::unique_ptr< ESResult > es_result = std::make_unique< ESResult >();
+            ESResult* es_result = new ESResult;
             AwsHttpResponseToString(response, es_result->result_json);
             PrepareCursorResult(*es_result);
             if (es_result->es_result_doc.has("cursor")) {
@@ -525,7 +517,7 @@ void ESCommunication::SendCursorQueries(const char* _cursor) {
                 SendCloseCursorRequest(cursor);
                 cursor.clear();
             }
-            m_result_queue.push(std::move(es_result));
+            m_result_queue.push(std::reference_wrapper< ESResult >(*es_result));
 
             lock_queue.unlock();
             condition_variable.notify_one();
@@ -595,20 +587,21 @@ inline void ESCommunication::LogMsg(ESLogLevel level, const char* msg) {
 
 ESResult* ESCommunication::PopResult() {
     std::unique_lock< std::mutex > lock_queue(mutex);
-    condition_variable.wait(lock_queue,
-                            [&]() { return !m_result_queue.empty(); });
+    auto now = std::chrono::system_clock::now();
+    condition_variable.wait_until(lock_queue,
+                                  now + std::chrono::milliseconds(100),
+                                  [&]() { return m_result_queue.IsFull(); });
 
     if (m_result_queue.empty()) {
         LogMsg(ES_WARNING, "Result queue is empty; returning null result.");
         return NULL;
     }
-    ESResult* result = m_result_queue.front().release();
-    m_result_queue.pop();
+    ESResult& result = m_result_queue.pop_front().get();
 
     lock_queue.unlock();
     condition_variable.notify_one();
 
-    return result;
+    return &result;
 }
 
 // TODO #36 - Send query to database to get encoding

@@ -14,10 +14,11 @@
  *
  */
 
+#define QUEUE_CAPACITY 2
 #include "es_result_queue.h"
 
-ESResultQueue::ESResultQueue(size_t queue_capacity) {
-    m_queue_capacity = queue_capacity;
+ESResultQueue::ESResultQueue()
+    : m_queue_capacity(QUEUE_CAPACITY) {
 }
 
 ESResultQueue::~ESResultQueue() {
@@ -37,7 +38,7 @@ SQLRETURN ESResultQueue::push(std::reference_wrapper< ESResult > es_result) {
     if (m_queue.size() < m_queue_capacity) {
         m_queue.push(es_result);
         return SQL_SUCCESS;
-    } 
+    }
     return SQL_ERROR;
 }
 

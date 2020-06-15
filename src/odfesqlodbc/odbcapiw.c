@@ -22,7 +22,7 @@
 #include "es_driver_connect.h"
 #include "es_info.h"
 #include "es_odbc.h"
-#include "statement.h"
+#include "es_statement.h"
 #include "unicode_support.h"
 
 RETCODE SQL_API SQLColumnsW(HSTMT StatementHandle, SQLWCHAR *CatalogName,

@@ -22,7 +22,7 @@
 #include "es_connection.h"
 #include "es_odbc.h"
 #include "misc.h"
-#include "statement.h"
+#include "es_statement.h"
 
 /*	SQLAllocConnect/SQLAllocEnv/SQLAllocStmt -> SQLAllocHandle */
 RETCODE SQL_API SQLAllocHandle(SQLSMALLINT HandleType, SQLHANDLE InputHandle,

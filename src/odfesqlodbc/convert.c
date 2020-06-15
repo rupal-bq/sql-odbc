@@ -42,7 +42,7 @@
 #include "es_connection.h"
 #include "es_types.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 
 CSTR NAN_STRING = "NaN";
 CSTR INFINITY_STRING = "Infinity";

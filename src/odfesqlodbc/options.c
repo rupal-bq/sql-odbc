@@ -22,7 +22,7 @@
 #include "es_odbc.h"
 #include "misc.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 #include "unicode_support.h"
 
 static RETCODE set_statement_option(ConnectionClass *conn, StatementClass *stmt,

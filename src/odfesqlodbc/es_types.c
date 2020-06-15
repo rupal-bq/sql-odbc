@@ -20,7 +20,7 @@
 #include "environ.h"
 #include "es_connection.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 #ifndef WIN32
 #include <limits.h>
 #endif

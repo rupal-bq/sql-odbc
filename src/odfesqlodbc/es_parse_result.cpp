@@ -28,7 +28,7 @@
 #ifdef __APPLE__
 #pragma clang diagnostic pop
 #endif  // __APPLE__
-#include "statement.h"
+#include "es_statement.h"
 
 typedef std::vector< std::pair< std::string, OID > > schema_type;
 typedef rabbit::array json_arr;

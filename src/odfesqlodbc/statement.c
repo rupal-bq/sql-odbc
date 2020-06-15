@@ -15,7 +15,7 @@
  */
 
 // clang-format off
-#include "statement.h"
+#include "es_statement.h"
 #include "misc.h" // strncpy_null
 
 #include "bind.h"
@@ -32,7 +32,6 @@
 
 #include "es_apifunc.h"
 #include "es_helper.h"
-#include "es_statement.h"
 // clang-format on
 
 /*	Map sql commands to statement types */

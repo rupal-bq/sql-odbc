@@ -38,7 +38,7 @@
 #include "misc.h"
 #include "multibyte.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 #include "tuple.h"
 
 /*	Trigger related stuff for SQLForeign Keys */

@@ -26,7 +26,7 @@
 #include "misc.h"
 #include "multibyte.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 
 /*	Associate a user-supplied buffer with a database column. */
 RETCODE SQL_API ESAPI_BindCol(HSTMT hstmt, SQLUSMALLINT icol,

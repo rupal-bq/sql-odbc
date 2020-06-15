@@ -25,7 +25,7 @@
 #include "es_connection.h"
 #include "misc.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 
 void TI_Destructor(TABLE_INFO **ti, int count) {
     int i;

@@ -22,7 +22,6 @@
 
 #include "es_statement.h"
 #include "misc.h"
-#include "statement.h"
 
 /*
  *	Used for building a Manual Result only

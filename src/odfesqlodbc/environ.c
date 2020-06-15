@@ -23,7 +23,7 @@
 #include "es_apifunc.h"
 #include "es_connection.h"
 #include "misc.h"
-#include "statement.h"
+#include "es_statement.h"
 #ifdef WIN32
 #include <winsock2.h>
 #endif /* WIN32 */

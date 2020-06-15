@@ -44,7 +44,7 @@
 #include "loadlib.h"
 #include "multibyte.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 
 #define PROTOCOL3_OPTS_MAX 30
 #define ERROR_BUFF_SIZE 200

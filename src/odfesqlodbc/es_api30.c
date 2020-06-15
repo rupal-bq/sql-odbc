@@ -26,7 +26,7 @@
 #include "loadlib.h"
 #include "misc.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 
 /*	SQLError -> SQLDiagRec */
 RETCODE SQL_API ESAPI_GetDiagRec(SQLSMALLINT HandleType, SQLHANDLE Handle,

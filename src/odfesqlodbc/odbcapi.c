@@ -27,7 +27,6 @@
 #include "loadlib.h"
 #include "misc.h"
 #include "qresult.h"
-#include "statement.h"
 
 BOOL SC_connection_lost_check(StatementClass *stmt, const char *funcname) {
     ConnectionClass *conn = SC_get_conn(stmt);

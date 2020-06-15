@@ -28,7 +28,6 @@
 #include "es_types.h"
 #include "misc.h"
 #include "qresult.h"
-#include "statement.h"
 #include "es_statement.h"
 
 /*	Helper macro */

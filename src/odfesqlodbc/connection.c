@@ -41,7 +41,7 @@
 #include "loadlib.h"
 #include "multibyte.h"
 #include "qresult.h"
-#include "statement.h"
+#include "es_statement.h"
 #ifndef WIN32
 #include <limits.h>
 #endif

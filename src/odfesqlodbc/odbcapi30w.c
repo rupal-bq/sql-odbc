@@ -22,7 +22,7 @@
 #include "es_apifunc.h"
 #include "es_connection.h"
 #include "misc.h"
-#include "statement.h"
+#include "es_statement.h"
 
 RETCODE SQL_API SQLGetStmtAttrW(SQLHSTMT hstmt, SQLINTEGER fAttribute,
                                 PTR rgbValue, SQLINTEGER cbValueMax,

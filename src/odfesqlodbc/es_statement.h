@@ -42,6 +42,8 @@ RETCODE AssignResult(StatementClass *stmt);
 SQLRETURN ESAPI_Cancel(HSTMT hstmt);
 SQLRETURN GetNextResultSet(StatementClass *stmt);
 void ClearESResult(void *es_result);
+void ClearResultContext(void *result_context_);
+void ESSendCursorQueries(StatementClass *stmt, char *server_cursor_id);
 
 enum {
     CancelRequestSet = 1L,
@@ -231,6 +233,8 @@ struct StatementClass_ {
     DescriptorClass irdi;
     DescriptorClass apdi;
     DescriptorClass ipdi;
+
+    void *result_context;
 
     STMT_Status status;
     char *__error_message;

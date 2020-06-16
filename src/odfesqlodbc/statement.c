@@ -162,9 +162,6 @@ RETCODE SQL_API ESAPI_FreeStmt(HSTMT hstmt, SQLUSMALLINT fOption) {
     if (fOption == SQL_DROP) {
         ConnectionClass *conn = stmt->hdbc;
 
-        // Clear queue in case it holds next pages of results
-        ESClearQueue(conn->esconn);
-
         /* Remove the statement from the connection's statement list */
         if (conn) {
             QResultClass *res;
@@ -283,6 +280,8 @@ StatementClass *SC_Constructor(ConnectionClass *conn) {
         rv->num_params = -1;      /* unknown */
         rv->processed_statements = NULL;
 
+        rv->result_context = NULL;
+
         rv->__error_message = NULL;
         rv->__error_number = 0;
         rv->eserror = NULL;
@@ -389,6 +388,11 @@ char SC_Destructor(StatementClass *self) {
     cancelNeedDataState(self);
     if (self->callbacks)
         free(self->callbacks);
+
+    if (self->result_context) {
+        ClearResultContext(self->result_context);
+        self->result_context = NULL;
+    }
 
     DELETE_STMT_CS(self);
     free(self);

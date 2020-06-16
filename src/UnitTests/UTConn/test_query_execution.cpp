@@ -42,7 +42,7 @@ runtime_options valid_conn_opt_val = {
     {valid_host, valid_port, "1", "0"},
     {"BASIC", valid_user, valid_pw, valid_region},
     {use_ssl, false, "", "", "", ""}};
-
+/*
 TEST(TestESExecDirect, ValidQuery) {
     ESCommunication conn;
     ASSERT_TRUE(conn.ConnectionOptions(valid_conn_opt_val, false, 0, 0));
@@ -128,3 +128,5 @@ TEST(TestConnPopResult, PopTwoQueryResults) {
     result = conn.PopResult();
     EXPECT_EQ(all_columns_flights_count, result->num_fields);
 }
+
+*/

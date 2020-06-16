@@ -19,10 +19,7 @@
 
 // clang-format off
 #include <memory>
-#include <queue>
-#include <future>
 #include "es_types.h"
-#include "es_result_queue.h"
 
 //Keep rabbit at top otherwise it gives build error because of some variable names like max, min
 #ifdef __APPLE__
@@ -57,9 +54,10 @@ class ESCommunication {
     ConnStatusType GetConnectionStatus();
     void DropDBConnection();
     void LogMsg(ESLogLevel level, const char* msg);
-    int ExecDirect(const char* query, const char* fetch_size_);
-    void SendCursorQueries(const char* cursor);
-    ESResult* PopResult();
+    std::shared_ptr< Aws::Http::HttpResponse > ExecDirect(
+        const char* query, const char* fetch_size_);
+    std::shared_ptr< Aws::Http::HttpResponse > SendCursorQuery(
+        const char* cursor);
     std::string GetClientEncoding();
     bool SetClientEncoding(std::string& encoding);
     bool IsSQLPluginInstalled(const std::string& plugin_response);
@@ -72,15 +70,11 @@ class ESCommunication {
         std::shared_ptr< Aws::Http::HttpResponse > response,
         std::string& output);
     void SendCloseCursorRequest(const std::string& cursor);
-    void ClearQueue();
 
    private:
     void InitializeConnection();
     bool CheckConnectionOptions();
     bool EstablishConnection();
-    void ConstructESResult(ESResult& result);
-    void GetJsonSchema(ESResult& es_result);
-    void PrepareCursorResult(ESResult& es_result);
 
     // TODO #35 - Go through and add error messages on exit conditions
     std::string m_error_message;  
@@ -88,7 +82,6 @@ class ESCommunication {
 
     ConnStatusType m_status;
     bool m_valid_connection_options;
-    ESResultQueue m_result_queue;
     runtime_options m_rt_opts;
     std::string m_client_encoding;
     Aws::SDKOptions m_options;

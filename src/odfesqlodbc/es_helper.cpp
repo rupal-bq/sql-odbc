@@ -67,20 +67,26 @@ void* InitializeESConn() {
     return new ESCommunication();
 }
 
-int ESExecDirect(void* es_conn, const char* statement, const char* fetch_size) {
+std::shared_ptr< Aws::Http::HttpResponse > ESExecDirect(
+    void* es_conn, const char* statement, const char* fetch_size) {
     return (es_conn && statement)
                ? static_cast< ESCommunication* >(es_conn)->ExecDirect(
                    statement, fetch_size)
-               : -1;
+               : NULL;
 }
 
-void ESSendCursorQueries(void* es_conn, const char* cursor) {
-    static_cast< ESCommunication* >(es_conn)->SendCursorQueries(cursor);
+std::shared_ptr< Aws::Http::HttpResponse > ESSendCursorQuery(
+    void* es_conn, const char* cursor) {
+    return es_conn ? static_cast< ESCommunication* >(es_conn)->SendCursorQuery(
+                   cursor)
+               : NULL;
 }
 
-ESResult* ESGetResult(void* es_conn) {
-    return es_conn ? static_cast< ESCommunication* >(es_conn)->PopResult()
-                   : NULL;
+void ESAwsHttpResponseToString(
+    void* es_conn, std::shared_ptr< Aws::Http::HttpResponse > response,
+    std::string& output) {
+    static_cast< ESCommunication* >(es_conn)->AwsHttpResponseToString(response,
+                                                                      output);
 }
 
 std::string ESGetClientEncoding(void* es_conn) {
@@ -96,16 +102,16 @@ bool ESSetClientEncoding(void* es_conn, std::string& encoding) {
                : false;
 }
 
+void SendCloseCursorRequest(void* es_conn, const std::string& cursor) {
+    static_cast< ESCommunication* >(es_conn)->SendCloseCursorRequest(cursor);
+}
+
 void ESDisconnect(void* es_conn) {
     delete static_cast< ESCommunication* >(es_conn);
 }
 
 void ESClearResult(ESResult* es_result) {
     delete es_result;
-}
-
-void ESClearQueue(void* es_conn) {
-     static_cast< ESCommunication* >(es_conn)->ClearQueue();
 }
 
 // This class provides a cross platform way of entering critical sections

@@ -84,7 +84,6 @@ class ESResultContext {
     void GetJsonSchema(ESResult &es_result);
     void PrepareCursorResult(ESResult &es_result);
 
-    StatementClass m_stmt;
     ESResultQueue m_result_queue;
     std::mutex m_mutex;
     std::condition_variable m_condition_variable;
@@ -220,9 +219,9 @@ SQLRETURN ESResultContext::ExecuteQuery(StatementClass *stmt) {
 
     if (!result->cursor.empty()) {
         // If response has cursor, this thread will retrives more results pages
-        auto send_cursor_queries = std::async(std::launch::async, [&]() {
-            ExecuteCursorQueries(stmt, result->cursor.c_str());
-        });
+        m_result_thread = std::thread(&ESResultContext::ExecuteCursorQueries,
+                                      this, stmt, result->cursor.c_str());
+        m_result_thread.detach();
     }
 
     return SQL_SUCCESS;
@@ -241,9 +240,18 @@ void ESResultContext::ExecuteCursorQueries(StatementClass *stmt,
             return;
         }
 
-        while (!cursor.empty() && !m_result_queue.IsFull()) {
+        while (!cursor.empty()) {
+            // Lock result queue
+            std::unique_lock< std::mutex > lock_queue(m_mutex);
+            auto now = std::chrono::system_clock::now();
+            // Timeout is 10000ms since SQLFetch might take more time for
+            // retriving data
+            m_condition_variable.wait_until(
+                lock_queue, now + std::chrono::milliseconds(10000),
+                [&]() { return !m_result_queue.IsFull(); });
+
             std::shared_ptr< Aws::Http::HttpResponse > response =
-                ESSendCursorQuery(conn->esconn, _cursor);
+                ESSendCursorQuery(conn->esconn, cursor.c_str());
 
             ESResult *es_result = new ESResult;
             ESAwsHttpResponseToString(conn, response, es_result->result_json);
@@ -253,7 +261,7 @@ void ESResultContext::ExecuteCursorQueries(StatementClass *stmt,
                 es_result->cursor =
                     es_result->es_result_doc["cursor"].as_string();
             } else {
-                SendCloseCursorRequest(conn, cursor);
+                SendCloseCursorRequest(conn->esconn, cursor);
                 cursor.clear();
             }
             SQLRETURN ret = m_result_queue.push(
@@ -261,6 +269,10 @@ void ESResultContext::ExecuteCursorQueries(StatementClass *stmt,
             if (ret == SQL_ERROR) {
                 LogMsg(ES_ERROR, "Failed to add result in queue");
             }
+
+             // Unlock result queue
+            lock_queue.unlock();
+            m_condition_variable.notify_one();
         }
     } catch (std::runtime_error &e) {
         m_error_message =
@@ -280,11 +292,23 @@ void GetResultContext(StatementClass *stmt) {
 }
 
 ESResult* ESResultContext::GetResult() {
+    // Lock result queue
+    std::unique_lock< std::mutex > lock_queue(m_mutex);
+    auto now = std::chrono::system_clock::now();
+    // Timeout is 100ms since result should be ready at this point
+    m_condition_variable.wait_until(lock_queue,
+                                    now + std::chrono::milliseconds(1000),
+                                    [&]() { return m_result_queue.IsFull(); });
+
     if (m_result_queue.empty()) {
         LogMsg(ES_WARNING, "Result queue is empty; returning null result.");
         return NULL;
     }
     ESResult &result = m_result_queue.pop_front().get();
+
+    // Unlock result queue
+    lock_queue.unlock();
+    m_condition_variable.notify_one();
 
     return &result;
 }
@@ -410,9 +434,13 @@ RETCODE ExecuteStatement(StatementClass *stmt, BOOL commit) {
         SC_set_Result(stmt, res);
     }
 
+    // If fetch size is O then pagination is disabled
+    // When pagination is disabled, there won't be more results to commit
+    std::string fetch_size(conn->connInfo.fetch_size);
+
     // This will commit results for SQLExecDirect and will not commit
     // results for SQLPrepare since only metadata is required for SQLPrepare
-    if (commit) {
+    if (commit && fetch_size.compare("0")) {
         GetNextResultSet(stmt);
     }
 
@@ -444,21 +472,23 @@ SQLRETURN GetNextResultSet(StatementClass *stmt) {
         static_cast< ESResultContext * >(stmt->result_context);
 
     ESResult *es_res = result_context->GetResult();
-    while (es_res != NULL) {
-        // Save server cursor id to fetch more pages later
-        if (es_res->es_result_doc.has("cursor")) {
-            QR_set_server_cursor_id(
-                q_res, es_res->es_result_doc["cursor"].as_string().c_str());
-        } else {
-            QR_set_server_cursor_id(q_res, NULL);
-        }
 
-        // Responsible for looping through rows, allocating tuples and
-        // appending these rows in q_result
-        CC_Append_Table_Data(es_res->es_result_doc, q_res, total_columns,
-                             *(q_res->fields));
-        es_res = result_context->GetResult();
+    if (es_res == NULL)
+        return SQL_SUCCESS;
+
+    // Save server cursor id to fetch more pages later
+    if (es_res->es_result_doc.has("cursor")) {
+        QR_set_server_cursor_id(
+            q_res, es_res->es_result_doc["cursor"].as_string().c_str());
+    } else {
+        QR_set_server_cursor_id(q_res, NULL);
     }
+
+    // Responsible for looping through rows, allocating tuples and
+    // appending these rows in q_result
+    CC_Append_Table_Data(es_res->es_result_doc, q_res, total_columns,
+                         *(q_res->fields));
+
     return SQL_SUCCESS;
 }
 

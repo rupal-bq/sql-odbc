@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  *
  */
-
+/*
 // clang-format off
 #include "pch.h"
 #include "unit_test_helper.h"
@@ -42,7 +42,7 @@ runtime_options valid_conn_opt_val = {
     {valid_host, valid_port, "1", "0"},
     {"BASIC", valid_user, valid_pw, valid_region},
     {use_ssl, false, "", "", "", ""}};
-/*
+
 TEST(TestESExecDirect, ValidQuery) {
     ESCommunication conn;
     ASSERT_TRUE(conn.ConnectionOptions(valid_conn_opt_val, false, 0, 0));

@@ -75,8 +75,8 @@ class ESResultContext {
    public:
     ESResultContext();
     ~ESResultContext();
-    SQLRETURN ESResultContext::ExecuteQuery(StatementClass *stmt);
-    ESResult *ESResultContext::GetResult();
+    SQLRETURN ExecuteQuery(StatementClass *stmt);
+    ESResult* GetResult();
     void ExecuteCursorQueries(StatementClass *stmt, const char *_cursor);
 
    private:
@@ -465,7 +465,7 @@ SQLRETURN GetNextResultSet(StatementClass *stmt) {
     }
 
     if (stmt->result_context == NULL) {
-        return NULL;
+        return SQL_ERROR;
     }
 
     ESResultContext *result_context =
